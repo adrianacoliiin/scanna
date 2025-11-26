@@ -1,0 +1,48 @@
+# FastAPI y servidor
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.12
+
+# Base de datos
+motor==3.3.2  # MongoDB async driver
+pymongo==4.6.1
+
+# Autenticación y seguridad
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.2
+
+# Configuración
+python-dotenv==1.0.1
+pydantic-settings==2.1.0
+
+# Validación
+pydantic[email]==2.12.4
+email-validator==2.1.0
+
+# Utilidades
+python-dateutil==2.9.0.post0
+
+# ============================================
+# DEPENDENCIAS DE IA (NUEVAS)
+# ============================================
+
+# PyTorch (para ViT)
+torch==2.5.1
+torchvision==0.20.1
+
+# Transformers (para ViT pre-entrenado)
+transformers==4.46.0
+
+# Procesamiento de imágenes
+Pillow==10.4.0
+
+# Visualización (para heatmaps)
+matplotlib==3.9.2
+numpy==1.26.4
+
+# Google Gemini AI
+google-genai==0.3.0
+
+# Requests (para servicios externos)
+requests==2.32.3
