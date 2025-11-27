@@ -33,10 +33,19 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Iniciando aplicación SCANNA...")
     await connect_to_mongo()
     
-    # Crear directorios para imágenes si no existen
-    os.makedirs("originales", exist_ok=True)
-    os.makedirs("mapas_atencion", exist_ok=True)
-    logger.info("📁 Directorios de imágenes verificados")
+    # ✅ CORRECCIÓN: Crear directorios dentro de uploads/
+    upload_base = Path(settings.upload_folder)
+    upload_base.mkdir(exist_ok=True)
+    
+    originales_path = upload_base / "originales"
+    mapas_path = upload_base / "mapas_atencion"
+    
+    originales_path.mkdir(exist_ok=True)
+    mapas_path.mkdir(exist_ok=True)
+    
+    logger.info(f"📁 Directorio base: {upload_base.absolute()}")
+    logger.info(f"📁 Originales: {originales_path.absolute()}")
+    logger.info(f"📁 Mapas de atención: {mapas_path.absolute()}")
     
     logger.info("✅ Aplicación lista")
     
@@ -96,35 +105,18 @@ app.include_router(registros_router)
 app.include_router(dashboard_router)
 
 
-# Servir archivos estáticos (imágenes subidas)
+# ✅ Servir archivos estáticos
 # IMPORTANTE: Los StaticFiles DEBEN montarse DESPUÉS de los routers
-# para evitar conflictos de rutas
 
-# 1. Directorio de uploads general (si existe en settings)
+# Servir toda la carpeta uploads/ (RECOMENDADO - más simple)
 upload_path = Path(settings.upload_folder)
 if upload_path.exists():
     app.mount("/uploads", StaticFiles(directory=str(upload_path)), name="uploads")
-    logger.info(f"📂 Sirviendo /uploads desde {upload_path}")
-
-# 2. Directorio de imágenes originales
-originales_path = Path("originales")
-if originales_path.exists():
-    app.mount("/originales", StaticFiles(directory="originales"), name="originales")
-    logger.info(f"📂 Sirviendo /originales")
+    logger.info(f"📂 Sirviendo /uploads desde {upload_path.absolute()}")
 else:
-    logger.warning(f"⚠️ Directorio 'originales' no existe, creándolo...")
-    originales_path.mkdir(exist_ok=True)
-    app.mount("/originales", StaticFiles(directory="originales"), name="originales")
-
-# 3. Directorio de mapas de atención
-mapas_path = Path("mapas_atencion")
-if mapas_path.exists():
-    app.mount("/mapas_atencion", StaticFiles(directory="mapas_atencion"), name="mapas_atencion")
-    logger.info(f"📂 Sirviendo /mapas_atencion")
-else:
-    logger.warning(f"⚠️ Directorio 'mapas_atencion' no existe, creándolo...")
-    mapas_path.mkdir(exist_ok=True)
-    app.mount("/mapas_atencion", StaticFiles(directory="mapas_atencion"), name="mapas_atencion")
+    upload_path.mkdir(parents=True, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=str(upload_path)), name="uploads")
+    logger.warning(f"⚠️ Directorio 'uploads' creado en {upload_path.absolute()}")
 
 
 # Rutas básicas
@@ -150,15 +142,18 @@ async def health_check():
         await db.command("ping")
         
         # Verificar directorios de imágenes
+        upload_base = Path(settings.upload_folder)
         dirs_status = {
-            "originales": os.path.exists("originales"),
-            "mapas_atencion": os.path.exists("mapas_atencion")
+            "uploads": upload_base.exists(),
+            "originales": (upload_base / "originales").exists(),
+            "mapas_atencion": (upload_base / "mapas_atencion").exists()
         }
         
         return {
             "status": "healthy",
             "database": "connected",
             "storage": dirs_status,
+            "upload_path": str(upload_base.absolute()),
             "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:
@@ -187,9 +182,9 @@ async def api_info():
             "dashboard": "/dashboard"
         },
         "static_files": {
-            "originales": "/originales",
-            "mapas_atencion": "/mapas_atencion",
-            "uploads": "/uploads"
+            "uploads": "/uploads",
+            "originales": "/uploads/originales",
+            "mapas_atencion": "/uploads/mapas_atencion"
         },
         "documentation": "/docs"
     }
@@ -201,14 +196,19 @@ if settings.mongodb_uri.startswith("mongodb://localhost"):
     async def list_files():
         """Listar archivos en directorios de imágenes (solo desarrollo)"""
         try:
-            originales = list(Path("originales").glob("*")) if Path("originales").exists() else []
-            mapas = list(Path("mapas_atencion").glob("*")) if Path("mapas_atencion").exists() else []
+            upload_base = Path(settings.upload_folder)
+            originales_path = upload_base / "originales"
+            mapas_path = upload_base / "mapas_atencion"
+            
+            originales = list(originales_path.glob("*")) if originales_path.exists() else []
+            mapas = list(mapas_path.glob("*")) if mapas_path.exists() else []
             
             return {
+                "base_path": str(upload_base.absolute()),
                 "originales": [f.name for f in originales if f.is_file()],
                 "mapas_atencion": [f.name for f in mapas if f.is_file()],
-                "total_originales": len(originales),
-                "total_mapas": len(mapas)
+                "total_originales": len([f for f in originales if f.is_file()]),
+                "total_mapas": len([f for f in mapas if f.is_file()])
             }
         except Exception as e:
             return {"error": str(e)}
