@@ -7,7 +7,12 @@ from app.db.models import (
     Token,
     EspecialistaResponse
 )
-from app.core.auth import get_password_hash, verify_password, create_access_token, get_current_active_especialista
+from app.core.auth import (
+    get_password_hash, 
+    verify_password, 
+    create_access_token, 
+    get_current_active_especialista
+)
 from app.db.database import get_database
 from app.config import settings
 
@@ -27,10 +32,12 @@ async def registrar_especialista(especialista: EspecialistaCreate):
             detail="El email ya está registrado"
         )
     
-    # Verificar cédula profesional si se proporciona
-    if especialista.cedula_profesional:
+    # Limpiar y verificar cédula profesional si se proporciona
+    cedula_limpia = especialista.cedula_profesional.strip() if especialista.cedula_profesional else None
+    
+    if cedula_limpia:
         existing_cedula = await db.especialistas.find_one(
-            {"cedulaProfesional": especialista.cedula_profesional}
+            {"cedulaProfesional": cedula_limpia}
         )
         if existing_cedula:
             raise HTTPException(
@@ -38,32 +45,55 @@ async def registrar_especialista(especialista: EspecialistaCreate):
                 detail="La cédula profesional ya está registrada"
             )
     
-    # Crear documento de especialista
+    # Crear documento base de especialista (solo campos obligatorios)
     especialista_doc = {
         "nombre": especialista.nombre,
         "apellido": especialista.apellido,
         "email": especialista.email,
         "password": get_password_hash(especialista.password),
         "area": especialista.area,
-        "cedulaProfesional": especialista.cedula_profesional or "",
-        "hospital": especialista.hospital or "",
-        "telefono": especialista.telefono or "",
         "activo": True,
         "fechaRegistro": datetime.utcnow(),
         "createdAt": datetime.utcnow(),
         "updatedAt": datetime.utcnow()
     }
     
-    # Insertar en la base de datos
-    result = await db.especialistas.insert_one(especialista_doc)
+    # ✅ CRÍTICO: Solo agregar campos opcionales si tienen valor real
+    # NO agregar el campo si está vacío o es None
+    if cedula_limpia:
+        especialista_doc["cedulaProfesional"] = cedula_limpia
     
-    # Obtener el especialista creado
-    created_especialista = await db.especialistas.find_one({"_id": result.inserted_id})
+    hospital_limpio = especialista.hospital.strip() if especialista.hospital else None
+    if hospital_limpio:
+        especialista_doc["hospital"] = hospital_limpio
     
-    # Convertir ObjectId a string para la respuesta
-    created_especialista["_id"] = str(created_especialista["_id"])
+    telefono_limpio = especialista.telefono.strip() if especialista.telefono else None
+    if telefono_limpio:
+        especialista_doc["telefono"] = telefono_limpio
     
-    return created_especialista
+    try:
+        # Insertar en la base de datos
+        result = await db.especialistas.insert_one(especialista_doc)
+        
+        # Obtener el especialista creado
+        created_especialista = await db.especialistas.find_one({"_id": result.inserted_id})
+        
+        # Convertir ObjectId a string para la respuesta
+        created_especialista["_id"] = str(created_especialista["_id"])
+        
+        return created_especialista
+        
+    except Exception as e:
+        # Manejo de errores más específico
+        if "duplicate key error" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ya existe un especialista con estos datos"
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al crear especialista: {str(e)}"
+        )
 
 
 @router.post("/login", response_model=Token)
