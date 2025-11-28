@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { ArrowLeft, Camera, Upload, Loader2 } from 'lucide-react';
 import { CameraCapture } from './CameraCapture';
-import { registrosAPI } from '../services/api';
+import { registrosAPI, API_BASE_URL } from '../services/api';
 
 interface NewDetectionProps {
   onClose: () => void;
@@ -41,21 +41,61 @@ export function NewDetection({ onClose }: NewDetectionProps) {
     setError(null);
 
     try {
-      // Validar edad
+      // ============================================
+      // VALIDACIONES DEL FRONTEND (solo datos del paciente)
+      // ============================================
+      
+      console.log('🔍 Validando datos del paciente...');
+      
+      // 1. Validar nombre del paciente
+      if (!formData.patientName || formData.patientName.trim().length === 0) {
+        throw new Error('El nombre del paciente es requerido');
+      }
+      if (formData.patientName.trim().length > 200) {
+        throw new Error('El nombre del paciente es demasiado largo (máx 200 caracteres)');
+      }
+      
+      // 2. Validar edad
       const edadNumerica = parseInt(formData.age);
       if (isNaN(edadNumerica) || edadNumerica < 0 || edadNumerica > 150) {
         throw new Error('La edad debe ser un número entre 0 y 150');
       }
+      
+      // 3. Validar género - CRÍTICO: debe estar seleccionado
+      if (!formData.gender || !['male', 'female'].includes(formData.gender)) {
+        throw new Error('Debe seleccionar un género (Masculino o Femenino)');
+      }
+      
+      // 4. Validar que haya archivo
+      if (!imageFile) {
+        throw new Error('No se ha seleccionado ninguna imagen');
+      }
+      
+      console.log('✅ Validaciones pasadas');
+      console.log('   - Nombre:', formData.patientName.trim());
+      console.log('   - Edad:', edadNumerica);
+      console.log('   - Género (frontend):', formData.gender);
 
-      // Crear FormData con los campos correctos según el backend
+      // ============================================
+      // CREAR FORMDATA CON CONVERSIÓN CORRECTA
+      // ============================================
+      
       const formDataToSend = new FormData();
       
       // Datos del paciente (campos exactos del backend)
-      formDataToSend.append('paciente_nombre', formData.patientName.trim());
-      formDataToSend.append('paciente_edad', edadNumerica.toString());
-      formDataToSend.append('paciente_sexo', formData.gender === 'male' ? 'Masculino' : 'Femenino');
+      const nombrePaciente = formData.patientName.trim();
       
-      // Número de expediente (opcional, solo enviarlo si tiene valor)
+      // ⚠️ CONVERSIÓN CRÍTICA: 'male'/'female' -> 'Masculino'/'Femenino'
+      // El backend SOLO acepta: "Masculino", "Femenino" u "Otro"
+      const sexoPaciente = formData.gender === 'male' ? 'Masculino' : 'Femenino';
+      
+      console.log('🔄 Conversión de género:', formData.gender, '->', sexoPaciente);
+      
+      formDataToSend.append('paciente_nombre', nombrePaciente);
+      formDataToSend.append('paciente_edad', edadNumerica.toString());
+      formDataToSend.append('paciente_sexo', sexoPaciente);
+      
+      // Número de expediente (opcional)
       if (formData.recordNumber?.trim()) {
         formDataToSend.append('numero_expediente', formData.recordNumber.trim());
       }
@@ -63,24 +103,36 @@ export function NewDetection({ onClose }: NewDetectionProps) {
       // Imagen original
       formDataToSend.append('imagen_original', imageFile);
       
-      // Generar explicación (true para que el backend genere el análisis con IA)
+      // Generar explicación
       formDataToSend.append('generar_explicacion', 'true');
 
-      console.log('📤 Enviando datos al backend...');
-      console.log('- Paciente:', formData.patientName.trim());
-      console.log('- Edad:', edadNumerica);
-      console.log('- Sexo:', formData.gender === 'male' ? 'Masculino' : 'Femenino');
-      console.log('- Expediente:', formData.recordNumber?.trim() || '(vacío)');
-      console.log('- Imagen:', imageFile.name, `(${(imageFile.size / 1024).toFixed(2)} KB)`);
+      console.log('📤 ========== ENVIANDO DATOS AL BACKEND ==========');
+      console.log('URL:', `${API_BASE_URL}/registros/`);
+      console.log('Campos del FormData:');
+      console.log('  - paciente_nombre:', nombrePaciente);
+      console.log('  - paciente_edad:', edadNumerica);
+      console.log('  - paciente_sexo:', sexoPaciente); // ← Debe ser "Masculino" o "Femenino"
+      console.log('  - numero_expediente:', formData.recordNumber?.trim() || '(no enviado)');
+      console.log('  - imagen_original:', {
+        name: imageFile.name,
+        type: imageFile.type,
+        size: `${(imageFile.size / 1024).toFixed(2)} KB`,
+        sizeBytes: imageFile.size
+      });
+      console.log('  - generar_explicacion: true');
+      console.log('================================================');
 
       // Enviar a la API
       const response = await registrosAPI.crear(formDataToSend);
 
+      console.log('✅ ========== RESPUESTA EXITOSA ==========');
+      console.log('Status: 201 Created');
+      console.log('Registro ID:', response._id);
+      console.log('Respuesta completa:', response);
+      console.log('========================================');
+
       // Guardar el ID del registro
       setRegistroId(response._id);
-      
-      console.log('📦 Respuesta completa del servidor:', response);
-      console.log('🖼️ Rutas de imágenes:', response.imagenes);
 
       // Construir URL base desde la configuración
       const API_BASE = 'http://localhost:8000';
@@ -101,9 +153,31 @@ export function NewDetection({ onClose }: NewDetectionProps) {
 
       setDetectionResult(result);
       setStep('results');
-    } catch (err) {
-      console.error('❌ Error al procesar imagen:', err);
-      setError(err instanceof Error ? err.message : 'Error al procesar la imagen');
+    } catch (err: any) {
+      console.error('❌ ========== ERROR DETECTADO ==========');
+      console.error('Tipo de error:', err.constructor.name);
+      console.error('Mensaje:', err.message);
+      console.error('Stack:', err.stack);
+      console.error('Error completo:', err);
+      console.error('=======================================');
+      
+      // Mensaje de error más descriptivo
+      let errorMessage = 'Error al procesar la imagen';
+      
+      if (err.message) {
+        errorMessage = err.message;
+      } else if (err.detail) {
+        errorMessage = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+      } else if (err.error) {
+        errorMessage = err.error;
+      }
+      
+      // Si es un error de red
+      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+        errorMessage = 'Error de conexión. Verifica que el backend esté corriendo en ' + API_BASE_URL;
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }

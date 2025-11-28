@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, Camera, AlertCircle, Lightbulb, Loader, Upload, X } from 'lucide-react';
-import { registrosAPI } from '../services/api';
+import { registrosAPI, API_BASE_URL } from '../services/api';
 
 interface CameraCaptureProps {
   onBack: () => void;

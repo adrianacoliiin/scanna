@@ -1,6 +1,6 @@
 export const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 const API_BASE_URL = BASE_URL;
-console.log(API_BASE_URL);
+console.log('API_BASE_URL:', API_BASE_URL);
 
 // Tipos
 export interface LoginCredentials {
@@ -253,6 +253,31 @@ export const dashboardAPI = {
 export const registrosAPI = {
   async crear(formData: FormData): Promise<Registro> {
     const token = getAuthToken();
+    
+    // 🔍 VALIDACIÓN CRÍTICA: Verificar que paciente_sexo sea válido ANTES de enviar
+    const sexo = formData.get('paciente_sexo');
+    if (!sexo || !['Masculino', 'Femenino', 'Otro'].includes(sexo as string)) {
+      console.error('❌ ERROR: paciente_sexo inválido:', sexo);
+      throw new Error(`Género inválido. Debe ser "Masculino" o "Femenino" (recibido: "${sexo}")`);
+    }
+    
+    // 🔍 LOG 1: Ver qué estamos enviando
+    console.log('📤 ========== ENVIANDO A API ==========');
+    console.log('URL:', `${API_BASE_URL}/registros/`);
+    console.log('FormData entries:');
+    for (const [key, value] of formData.entries()) {
+      if (value instanceof File) {
+        console.log(`  ${key}:`, {
+          name: value.name,
+          type: value.type,
+          size: `${(value.size / 1024).toFixed(2)} KB`
+        });
+      } else {
+        console.log(`  ${key}:`, value);
+      }
+    }
+    console.log('======================================');
+
     const response = await fetch(`${API_BASE_URL}/registros/`, {
       method: 'POST',
       headers: {
@@ -261,12 +286,57 @@ export const registrosAPI = {
       body: formData,
     });
 
+    // 🔍 LOG 2: Ver qué respondió el servidor
+    console.log('📥 ========== RESPUESTA DEL SERVIDOR ==========');
+    console.log('Status:', response.status, response.statusText);
+    console.log('Headers:', Object.fromEntries(response.headers.entries()));
+
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Error al crear registro');
+      // 🔍 LOG 3: Ver el error COMPLETO
+      const errorText = await response.text();
+      console.error('❌ Error Response (texto crudo):', errorText);
+      
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+        console.error('❌ Error Response (JSON):', errorData);
+      } catch (e) {
+        console.error('❌ No se pudo parsear como JSON');
+        throw new Error(`Error ${response.status}: ${errorText.substring(0, 200)}`);
+      }
+
+      // Extraer mensaje de error detallado
+      let errorMessage = 'Error al crear registro';
+      
+      if (errorData.detail) {
+        if (typeof errorData.detail === 'string') {
+          errorMessage = errorData.detail;
+        } else if (Array.isArray(errorData.detail)) {
+          // Errores de validación de Pydantic
+          console.error('❌ Errores de validación:', errorData.detail);
+          errorMessage = errorData.detail.map((err: any) => {
+            const field = err.loc ? err.loc.join('.') : 'unknown';
+            const msg = err.msg || 'error de validación';
+            const input = err.input ? ` (recibido: "${err.input}")` : '';
+            return `${field}: ${msg}${input}`;
+          }).join(' | ');
+        } else {
+          errorMessage = JSON.stringify(errorData.detail);
+        }
+      }
+      
+      console.error('❌ Mensaje final de error:', errorMessage);
+      console.error('===========================================');
+      
+      throw new Error(errorMessage);
     }
 
-    return await response.json();
+    // ✅ Respuesta exitosa
+    const data = await response.json();
+    console.log('✅ Registro creado exitosamente:', data);
+    console.log('===========================================');
+    
+    return data;
   },
 
   async listar(params?: {

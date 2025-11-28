@@ -9,5 +9,23 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- ========================================
+         ERUDA: Consola de JavaScript en móvil
+         ======================================== -->
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>
+      // Solo activar en desarrollo (detecta localhost o IP local)
+      if (
+        window.location.hostname === 'localhost' || 
+        window.location.hostname.match(/^192\.168\.\d+\.\d+$/) ||
+        window.location.hostname.match(/^10\.\d+\.\d+\.\d+$/) ||
+        window.location.hostname.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+$/)
+      ) {
+        eruda.init();
+        console.log('🔍 Eruda Console activada');
+        console.log('📱 Toca el ícono flotante en la esquina inferior derecha para ver la consola');
+      }
+    </script>
   </body>
 </html>
