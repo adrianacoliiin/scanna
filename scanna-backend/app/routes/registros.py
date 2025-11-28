@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File, Form
+from fastapi.responses import JSONResponse
 from datetime import datetime
 from typing import Optional, List
 from bson import ObjectId
@@ -10,7 +11,9 @@ from app.db.models import RegistroResponse
 from app.core.auth import get_current_active_especialista
 from app.core.utils import save_uploaded_image, generate_numero_expediente, delete_file, get_file_path
 from app.db.database import get_database
-from app.ai import get_model, generate_medical_explanation
+
+# ✅ NUEVO: Importar ImageQualityError para manejo de imágenes inválidas
+from app.ai import get_model, generate_medical_explanation, ImageQualityError
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +156,8 @@ async def analizar_imagen_ia(
     """
     🤖 Analizar imagen con IA (sin guardar registro)
     
+    ✅ INCLUYE VALIDACIÓN OOD: Rechaza imágenes de baja calidad
+    
     Útil para:
     - Pruebas rápidas del modelo
     - Vista previa antes de guardar
@@ -167,11 +172,47 @@ async def analizar_imagen_ia(
         # 1. Validar y cargar imagen
         pil_image, _ = await validate_and_load_image(imagen)
         
-        # 2. Analizar con modelo ViT
+        # 2. Analizar con modelo ViT (CON VALIDACIÓN OOD)
         model = get_model()
-        result = model.predict(pil_image, generate_heatmap=generar_explicacion)
         
-        logger.info(f"✅ Predicción: {result['resultado']} ({result['confianza']}%)")
+        try:
+            result = model.predict(
+                pil_image, 
+                generate_heatmap=generar_explicacion,
+                validate_quality=True  # ✅ ACTIVAR VALIDACIÓN OOD
+            )
+            
+            logger.info(f"✅ Predicción: {result['resultado']} ({result['confianza']}%)")
+            
+        except ImageQualityError as e:
+            # ⛔ IMAGEN RECHAZADA POR BAJA CALIDAD
+            logger.warning(f"⚠️ Imagen rechazada: {e.message}")
+            
+            # Explicación del rechazo
+            explicacion_simple = (
+                "La imagen no cumple con los estándares de calidad mínimos "
+                "para realizar un análisis médico confiable. "
+                "Por favor, capture una nueva imagen siguiendo las recomendaciones."
+            )
+            
+            return JSONResponse(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                content={
+                    "error": "IMAGEN_INVALIDA",
+                    "message": "La imagen no cumple con los estándares de calidad mínimos",
+                    "detalles": {
+                        "confianza": round(e.confidence * 100, 2),
+                        "umbral_requerido": round(e.threshold * 100, 2),
+                        "explicacion": explicacion_simple
+                    },
+                    "recomendaciones": [
+                        "Capture una imagen clara y bien iluminada",
+                        "Asegúrese de enfocar la conjuntiva palpebral inferior",
+                        "Evite sombras y reflejos directos",
+                        "Mantenga la cámara estable durante la captura"
+                    ]
+                }
+            )
         
         # 3. Generar explicación si se solicita
         if generar_explicacion:
@@ -192,6 +233,9 @@ async def analizar_imagen_ia(
             "mensaje": "Análisis completado exitosamente"
         }
         
+    except ImageQualityError:
+        # Ya manejado arriba
+        raise
     except HTTPException:
         raise
     except Exception as e:
@@ -213,9 +257,9 @@ async def crear_registro(
     current_especialista: dict = Depends(get_current_active_especialista)
 ):
     """
-    🤖 Crear un nuevo registro de detección con análisis de IA OBLIGATORIO
     
-    El modelo ViT analiza automáticamente cada imagen subida.
+    El modelo ViT analiza automáticamente cada imagen subida y SOLO guarda
+    en la base de datos si la imagen pasa los estándares de calidad (≥75% confianza).
     
     Args:
         paciente_nombre: Nombre completo del paciente
@@ -227,6 +271,9 @@ async def crear_registro(
     
     Returns:
         RegistroResponse con todos los datos del registro creado
+        
+    Raises:
+        422 UNPROCESSABLE_ENTITY: Si la imagen no cumple con los estándares de calidad
     """
     db = get_database()
     
@@ -261,22 +308,63 @@ async def crear_registro(
         )
     
     # ========================================
-    # 3. ANÁLISIS CON IA (OBLIGATORIO)
+    # 3. ✅ ANÁLISIS CON IA + VALIDACIÓN OOD
     # ========================================
     
-    logger.info("🤖 Iniciando análisis con IA...")
+    logger.info("🤖 Iniciando análisis con IA (con validación de calidad)...")
     
     try:
         # Cargar modelo (singleton, solo se carga una vez)
         model = get_model()
         
-        # Predecir
-        ia_result = model.predict(pil_image, generate_heatmap=generar_explicacion)
+        # ✅ VALIDACIÓN OOD + PREDICCIÓN
+        try:
+            ia_result = model.predict(
+                pil_image, 
+                generate_heatmap=generar_explicacion,
+                validate_quality=True  # ✅ ACTIVAR VALIDACIÓN OOD
+            )
+            
+            resultado = ia_result["resultado"]  # "Anemia" o "No Anemia"
+            confianza = ia_result["confianza"]
+            
+            logger.info(f"✅ Predicción IA: {resultado} (confianza: {confianza}%)")
+            
+        except ImageQualityError as e:
+            # ========================================
+            # ⛔ IMAGEN RECHAZADA - NO GUARDAR EN BD
+            # ========================================
+            logger.warning(f"⚠️ Imagen rechazada por baja calidad: {e.message}")
+            
+            # Retornar error 422 SIN GUARDAR NADA
+            return JSONResponse(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                content={
+                    "error": "IMAGEN_INVALIDA",
+                    "message": "La imagen no cumple con los estándares de calidad mínimos para un análisis médico confiable",
+                    "detalles": {
+                        "confianza": round(e.confidence * 100, 2),
+                        "umbral_requerido": round(e.threshold * 100, 2),
+                        "motivo": (
+                            "La imagen no tiene suficiente calidad para un análisis confiable. "
+                            "Esto puede deberse a: imagen desenfocada, iluminación inadecuada, "
+                            "o que no corresponda a una conjuntiva ocular."
+                        )
+                    },
+                    "recomendaciones": [
+                        "Capture una imagen clara y bien iluminada de la conjuntiva ocular",
+                        "Asegúrese de enfocar correctamente la conjuntiva palpebral inferior",
+                        "Evite sombras, reflejos directos y obstrucciones (dedos, pestañas)",
+                        "Mantenga la cámara estable durante la captura",
+                        "El paciente debe mirar hacia arriba mientras tira suavemente del párpado inferior"
+                    ]
+                }
+            )
         
-        resultado = ia_result["resultado"]  # "Anemia" o "No Anemia"
-        confianza = ia_result["confianza"]
-        
-        logger.info(f"✅ Predicción IA: {resultado} (confianza: {confianza}%)")
+        # ========================================
+        # ✅ SI LLEGAMOS AQUÍ, LA IMAGEN ES VÁLIDA
+        # Continuar con el flujo normal
+        # ========================================
         
         # Generar explicación con Gemini (si se solicita)
         ai_summary = None
@@ -313,6 +401,9 @@ async def crear_registro(
                 except Exception as e:
                     logger.warning(f"⚠️ Error guardando heatmap: {e}")
         
+    except ImageQualityError:
+        # Ya manejado arriba, pero por si acaso
+        raise
     except Exception as e:
         logger.error(f"❌ Error en análisis de IA: {e}")
         raise HTTPException(
@@ -407,11 +498,15 @@ async def crear_registro(
             "confianza": confianza,
             "procesadoConIA": True
         },
-        "resultado": resultado,
+        "resultado": resultado,  # ✅ Solo "Anemia" o "No Anemia" (nunca "no valido")
         "fechaAnalisis": datetime.utcnow(),
         "createdAt": datetime.utcnow(),
         "updatedAt": datetime.utcnow()
     }
+    
+    # ✅ OPCIONAL: Agregar info de validación OOD (para debugging/métricas)
+    if ia_result.get("validacion_calidad"):
+        registro_doc["validacionCalidad"] = ia_result["validacion_calidad"]
     
     # ========================================
     # 7. INSERTAR EN MONGODB
@@ -462,6 +557,9 @@ async def reanalizar_registro(
     """
     🔄 Re-analizar un registro existente con IA
     
+    ✅ INCLUYE VALIDACIÓN OOD: Si la imagen guardada ya no pasa la validación,
+    se informa al usuario pero NO se modifica el registro.
+    
     Útil para:
     - Actualizar análisis con nueva versión del modelo
     - Generar explicación si no se generó originalmente
@@ -511,17 +609,48 @@ async def reanalizar_registro(
         # Cargar imagen
         pil_image = Image.open(image_path).convert("RGB")
         
-        # Analizar con IA
+        # Analizar con IA (CON VALIDACIÓN)
         model = get_model()
-        ia_result = model.predict(pil_image, generate_heatmap=generar_explicacion)
         
-        result = {
-            "resultado": ia_result["resultado"],
-            "confianza": ia_result["confianza"],
-            "probabilidades": ia_result["probabilidades"]
-        }
-        
-        logger.info(f"✅ Re-análisis: {result['resultado']} ({result['confianza']}%)")
+        try:
+            ia_result = model.predict(
+                pil_image, 
+                generate_heatmap=generar_explicacion,
+                validate_quality=True  # ✅ VALIDAR
+            )
+            
+            result = {
+                "resultado": ia_result["resultado"],
+                "confianza": ia_result["confianza"],
+                "probabilidades": ia_result["probabilidades"]
+            }
+            
+            logger.info(f"✅ Re-análisis: {result['resultado']} ({result['confianza']}%)")
+            
+        except ImageQualityError as e:
+            # ⚠️ La imagen guardada ya no pasa la validación actual
+            logger.warning(f"⚠️ Imagen histórica no pasa validación actual: {e.message}")
+            
+            return JSONResponse(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                content={
+                    "error": "IMAGEN_HISTORICA_INVALIDA",
+                    "message": (
+                        "La imagen guardada no cumple con los estándares actuales de validación. "
+                        "Esto puede deberse a que los criterios de calidad se han actualizado. "
+                        "El registro NO será modificado."
+                    ),
+                    "detalles": {
+                        "confianza": round(e.confidence * 100, 2),
+                        "umbral_actual": round(e.threshold * 100, 2)
+                    },
+                    "registro_id": registro_id,
+                    "nota": (
+                        "El registro original se mantiene intacto. "
+                        "Si necesita un nuevo análisis, capture una imagen nueva."
+                    )
+                }
+            )
         
         # Generar explicación
         if generar_explicacion:
@@ -554,6 +683,9 @@ async def reanalizar_registro(
             "mensaje": "Registro re-analizado exitosamente"
         }
         
+    except ImageQualityError:
+        # Ya manejado arriba
+        raise
     except Exception as e:
         logger.error(f"❌ Error re-analizando: {e}")
         raise HTTPException(
@@ -570,12 +702,18 @@ async def listar_registros(
     buscar: Optional[str] = None,
     current_especialista: dict = Depends(get_current_active_especialista)
 ):
-    """Listar registros del especialista autenticado"""
+    """
+    Listar registros del especialista autenticado
+    
+    ✅ Solo retorna registros válidos guardados en BD
+    (Las imágenes rechazadas nunca se guardan)
+    """
     db = get_database()
     especialista_id = current_especialista["_id"]
     
     query = {"especialistaId": especialista_id}
     
+    # ✅ resultado solo puede ser "Anemia" o "No Anemia" (nunca "no valido")
     if resultado and resultado in ["Anemia", "No Anemia"]:
         query["resultado"] = resultado
     

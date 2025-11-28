@@ -6,7 +6,8 @@ Detección de anemia mediante análisis de imágenes oculares
 from .ai_model import (
     AnemiaDetectionModel,
     get_model,
-    analyze_image
+    analyze_image,
+    ImageQualityError
 )
 
 from .ai_explainer import (
@@ -19,6 +20,7 @@ __all__ = [
     "AnemiaDetectionModel",
     "get_model",
     "analyze_image",
+    "ImageQualityError", 
     "GeminiExplainer",
     "get_explainer",
     "generate_medical_explanation"

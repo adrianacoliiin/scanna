@@ -215,6 +215,48 @@ class GeminiExplainer:
             logger.error(f"❌ Error generando resumen: {e}")
             return self._generate_fallback_summary(predicted_class, confidence)
     
+    def generate_invalid_image_explanation(
+        self,
+        confidence: float,
+        threshold: float
+    ) -> str:
+        """
+        ✅ NUEVO: Generar explicación para imágenes rechazadas por baja calidad
+        
+        Args:
+            confidence: Confianza de la imagen (0-1)
+            threshold: Umbral requerido (0-1)
+        
+        Returns:
+            str con explicación médica del rechazo
+        """
+        explanation = (
+            f"⛔ **IMAGEN RECHAZADA POR BAJA CALIDAD**\n\n"
+            f"El sistema de validación automática ha detectado que esta imagen "
+            f"no cumple con los estándares mínimos de calidad para realizar un "
+            f"análisis médico confiable.\n\n"
+            f"**Detalles técnicos:**\n"
+            f"- Confianza del modelo: {confidence*100:.1f}%\n"
+            f"- Umbral requerido: ≥ {threshold*100:.0f}%\n\n"
+            f"**Posibles causas:**\n"
+            f"• Imagen desenfocada o con poca nitidez\n"
+            f"• Iluminación insuficiente o excesiva\n"
+            f"• La imagen no corresponde a una conjuntiva ocular\n"
+            f"• Presencia de obstrucciones (dedos, pestañas)\n"
+            f"• Ángulo inadecuado de captura\n\n"
+            f"**Recomendaciones para una nueva captura:**\n"
+            f"1. Asegure una iluminación adecuada (luz natural o LED blanco)\n"
+            f"2. Mantenga la cámara estable y enfocada\n"
+            f"3. Capture la conjuntiva palpebral inferior claramente visible\n"
+            f"4. Evite sombras y reflejos directos\n"
+            f"5. El paciente debe mirar hacia arriba mientras tira suavemente del párpado inferior\n\n"
+            f"**IMPORTANTE:** Por seguridad del paciente y confiabilidad del diagnóstico, "
+            f"este análisis no se guardará en el sistema. Por favor, realice una nueva captura "
+            f"siguiendo las recomendaciones anteriores."
+        )
+        
+        return explanation
+    
     def _generate_fallback_summary(
         self, 
         predicted_class: str, 
