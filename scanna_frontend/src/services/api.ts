@@ -78,6 +78,7 @@ export interface Registro {
   analisis: {
     resultado?: string;
     aiSummary?: string;
+    confianza?: number;
   };
   resultado: string;
   fechaAnalisis: string;

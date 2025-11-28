@@ -14,7 +14,7 @@ interface UserData {
 }
 
 export function Sidebar({ activeTab, onTabChange, onLogout }: SidebarProps) {
-  const [userData, setUserData] = useState<UserData>({
+  const [userData] = useState<UserData>({
     name: '',
     specialty: '',
     initials: ''

@@ -11,7 +11,6 @@ interface AgeDataPoint {
 }
 
 export function AgeDistributionChart() {
-  const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year'>('month');
   const [chartData, setChartData] = useState<AgeDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +49,7 @@ export function AgeDistributionChart() {
     };
 
     fetchAgeDistribution();
-  }, [timeRange]); // Se mantiene timeRange por si en el futuro quieres implementar filtros
+  }, []);
 
   const getBarColor = (index: number) => {
     const colors = [
@@ -65,7 +64,7 @@ export function AgeDistributionChart() {
     return colors[index % colors.length];
   };
 
-  const getBarRadius = () => {
+  const getBarRadius = (): [number, number, number, number] => {
     if (typeof window !== 'undefined') {
       const width = window.innerWidth;
       if (width < 640) return [12, 12, 0, 0];
@@ -75,7 +74,7 @@ export function AgeDistributionChart() {
     return [12, 12, 0, 0];
   };
 
-  const [barRadius, setBarRadius] = useState(getBarRadius());
+  const [barRadius, setBarRadius] = useState<[number, number, number, number]>(getBarRadius());
 
   useEffect(() => {
     const handleResize = () => {
@@ -162,40 +161,6 @@ export function AgeDistributionChart() {
           </div>
           <p className="text-sm text-gray-500">Casos detectados por rango de edad</p>
         </div>
-
-        {/* Time Range Selector - Por ahora deshabilitado, puedes implementarlo si el backend lo soporta */}
-        {/* <div className="flex gap-2">
-          <button
-            onClick={() => setTimeRange('week')}
-            className={`px-3 py-1.5 rounded-full text-xs tracking-tight transition-all ${
-              timeRange === 'week'
-                ? 'bg-[#001F54] text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            Semana
-          </button>
-          <button
-            onClick={() => setTimeRange('month')}
-            className={`px-3 py-1.5 rounded-full text-xs tracking-tight transition-all ${
-              timeRange === 'month'
-                ? 'bg-[#001F54] text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            Mes
-          </button>
-          <button
-            onClick={() => setTimeRange('year')}
-            className={`px-3 py-1.5 rounded-full text-xs tracking-tight transition-all ${
-              timeRange === 'year'
-                ? 'bg-[#001F54] text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            Año
-          </button>
-        </div> */}
       </div>
 
       {/* Stats Cards */}

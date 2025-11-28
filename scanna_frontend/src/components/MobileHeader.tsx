@@ -15,9 +15,11 @@ interface UserData {
   initials: string;
 }
 
+type TabType = 'dashboard' | 'history' | 'profile';
+
 export function MobileHeader({ activeTab, onTabChange, onLogout }: MobileHeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [userData, setUserData] = useState<UserData>({
+  const [userData] = useState<UserData>({
     name: '',
     specialty: '',
     initials: ''
@@ -34,13 +36,13 @@ export function MobileHeader({ activeTab, onTabChange, onLogout }: MobileHeaderP
     //   }));
   }, []);
 
-  const menuItems = [
+  const menuItems: Array<{ id: TabType; icon: typeof Home; label: string }> = [
     { id: 'dashboard', icon: Home, label: 'Inicio' },
     { id: 'history', icon: FileText, label: 'Historial' },
     { id: 'profile', icon: User, label: 'Perfil' },
   ];
 
-  const handleTabChange = (tab: 'dashboard' | 'history' | 'profile') => {
+  const handleTabChange = (tab: TabType) => {
     onTabChange(tab);
     setIsMenuOpen(false);
   };
@@ -107,7 +109,7 @@ export function MobileHeader({ activeTab, onTabChange, onLogout }: MobileHeaderP
                     return (
                       <button
                         key={item.id}
-                        onClick={() => handleTabChange(item.id as any)}
+                        onClick={() => handleTabChange(item.id)}
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
                           isActive
                             ? 'bg-[#001F54] text-white shadow-md'
