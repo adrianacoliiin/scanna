@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { ArrowLeft, Camera, Upload, Loader2 } from 'lucide-react';
 import { CameraCapture } from './CameraCapture';
+import { ImageQualityErrorModal } from './ImageQualityErrorModal'; // ✅ NUEVO
 import { registrosAPI, API_BASE_URL } from '../services/api';
 
 interface NewDetectionProps {
@@ -28,6 +29,10 @@ export function NewDetection({ onClose }: NewDetectionProps) {
   const [error, setError] = useState<string | null>(null);
   const [registroId, setRegistroId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ✅ NUEVO: Estados para el modal de error de calidad
+  const [showQualityErrorModal, setShowQualityErrorModal] = useState(false);
+  const [qualityErrorData, setQualityErrorData] = useState<any>(null);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -161,23 +166,37 @@ export function NewDetection({ onClose }: NewDetectionProps) {
       console.error('Error completo:', err);
       console.error('=======================================');
       
-      // Mensaje de error más descriptivo
-      let errorMessage = 'Error al procesar la imagen';
-      
-      if (err.message) {
-        errorMessage = err.message;
-      } else if (err.detail) {
-        errorMessage = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
-      } else if (err.error) {
-        errorMessage = err.error;
+      // ✅ NUEVO: Manejo del error 422 (imagen rechazada por baja calidad)
+      if (err.response?.status === 422 && err.response?.data?.error === 'IMAGEN_INVALIDA') {
+        console.log('⛔ Error 422 detectado en NewDetection - Imagen de baja calidad');
+        console.log('Datos del error:', err.response.data);
+        
+        // Guardar datos del error y mostrar modal
+        setQualityErrorData(err.response.data);
+        setShowQualityErrorModal(true);
+        
+        // NO mostrar error genérico, solo el modal
+        setError(null);
+        
+      } else {
+        // Mensaje de error más descriptivo para otros errores
+        let errorMessage = 'Error al procesar la imagen';
+        
+        if (err.message) {
+          errorMessage = err.message;
+        } else if (err.detail) {
+          errorMessage = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+        } else if (err.error) {
+          errorMessage = err.error;
+        }
+        
+        // Si es un error de red
+        if (err.name === 'TypeError' && err.message.includes('fetch')) {
+          errorMessage = 'Error de conexión. Verifica que el backend esté corriendo en ' + API_BASE_URL;
+        }
+        
+        setError(errorMessage);
       }
-      
-      // Si es un error de red
-      if (err.name === 'TypeError' && err.message.includes('fetch')) {
-        errorMessage = 'Error de conexión. Verifica que el backend esté corriendo en ' + API_BASE_URL;
-      }
-      
-      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -193,6 +212,20 @@ export function NewDetection({ onClose }: NewDetectionProps) {
     }
     
     return 'warning';
+  };
+
+  // ✅ NUEVO: Funciones para manejar el modal de error de calidad
+  const handleCloseQualityErrorModal = () => {
+    setShowQualityErrorModal(false);
+    setQualityErrorData(null);
+  };
+
+  const handleRetryFromModal = () => {
+    setShowQualityErrorModal(false);
+    setQualityErrorData(null);
+    // Limpiar el formulario para permitir nueva captura
+    setError(null);
+    // El usuario puede volver a usar "Usar Cámara" o "Subir Foto"
   };
 
   const handleSaveResults = () => {
@@ -457,6 +490,16 @@ export function NewDetection({ onClose }: NewDetectionProps) {
           </p>
         </div>
       </div>
+
+      {/* ✅ NUEVO: Modal de Error de Calidad */}
+      {qualityErrorData && (
+        <ImageQualityErrorModal
+          isOpen={showQualityErrorModal}
+          onClose={handleCloseQualityErrorModal}
+          onRetry={handleRetryFromModal}
+          errorData={qualityErrorData}
+        />
+      )}
     </div>
   );
 }

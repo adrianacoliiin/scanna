@@ -39,8 +39,17 @@ export function History() {
       
       const mappedDetections: Detection[] = data.ultimos_analisis.map((registro) => {
         const fechaAnalisis = new Date(registro.fechaAnalisis);
-        const isPositive = registro.resultado.toLowerCase().includes('anemia') || 
-                          registro.resultado.toLowerCase() === 'positivo';
+        const rawResult = (registro.analisis?.resultado || registro.resultado || '').toLowerCase();
+
+        const isNegative =
+          rawResult.includes('negativo') ||
+          rawResult.includes('no anemia') ||
+          rawResult.includes('sin anemia') ||
+          rawResult.includes('no presenta anemia');
+
+        const isPositive =
+          !isNegative &&
+          (rawResult.includes('anemia') || rawResult.includes('positivo'));
         
         return {
           id: registro._id,

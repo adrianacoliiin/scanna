@@ -93,6 +93,18 @@ export interface EspecialistaEstadisticas {
   ultimos_analisis: Registro[];
 }
 
+// ✅ NUEVO: Interfaz para el error 422
+export interface ImageInvalidError {
+  error: string;
+  message: string;
+  detalles: {
+    confianza: number;
+    umbral_requerido: number;
+    motivo?: string;
+  };
+  recomendaciones?: string[];
+}
+
 const getAuthToken = (): string | null => {
   return localStorage.getItem('access_token');
 };
@@ -129,8 +141,6 @@ export const authAPI = {
   },
 
   async register(userData: RegisterData): Promise<Especialista> {
-    // CRÍTICO: El backend de FastAPI inserta None si no recibe estos campos
-    // MongoDB rechaza None, así que SIEMPRE enviamos strings (vacíos si es necesario)
     const cleanData = {
       nombre: userData.nombre,
       apellido: userData.apellido,
@@ -290,6 +300,35 @@ export const registrosAPI = {
     console.log('📥 ========== RESPUESTA DEL SERVIDOR ==========');
     console.log('Status:', response.status, response.statusText);
     console.log('Headers:', Object.fromEntries(response.headers.entries()));
+
+    // ✅ CRÍTICO: MANEJAR ERROR 422 ANTES DE OTROS ERRORES
+    if (response.status === 422) {
+      const errorText = await response.text();
+      console.log('⛔ Error 422 detectado (texto crudo):', errorText);
+      
+      try {
+        const errorData: ImageInvalidError = JSON.parse(errorText);
+        console.log('⛔ Error 422 (JSON):', errorData);
+        
+        // Verificar si es error de imagen inválida
+        if (errorData.error === 'IMAGEN_INVALIDA') {
+          console.log('✅ Error de IMAGEN_INVALIDA confirmado');
+          
+          // ✅ CREAR UN ERROR ESPECIAL CON LA ESTRUCTURA CORRECTA
+          const specialError = new Error('IMAGEN_INVALIDA') as any;
+          specialError.status = 422;
+          specialError.data = errorData;
+          specialError.isImageQualityError = true;
+          
+          throw specialError;
+        }
+      } catch (parseError) {
+        if ((parseError as any).isImageQualityError) {
+          throw parseError; // Re-lanzar el error especial
+        }
+        console.error('❌ No se pudo parsear error 422 como JSON');
+      }
+    }
 
     if (!response.ok) {
       // 🔍 LOG 3: Ver el error COMPLETO

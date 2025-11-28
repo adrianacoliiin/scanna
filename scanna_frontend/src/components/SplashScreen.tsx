@@ -24,13 +24,13 @@ export function SplashScreen({ onComplete, duration = 2500 }: SplashScreenProps)
   }
 
   return (
-    <div className="fixed inset-0 flex flex-col items-center justify-center z-50 overflow-hidden bg-[#0A4A8F]">
-      {/* Background con gradiente radial sutil */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0A4A8F] via-[#0D3B6F] to-[#0A4A8F]">
-        <div className="absolute inset-0 opacity-30">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-white rounded-full blur-3xl opacity-10" />
-        </div>
+    <div className="fixed inset-0 flex flex-col items-center justify-center z-50 overflow-hidden bg-[#001F54]">
+    {/* Background con gradiente radial sutil */}
+    <div className="absolute inset-0 bg-gradient-to-b from-[#001F54] via-[#001A45] to-[#001F54]">
+      <div className="absolute inset-0 opacity-30">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-white rounded-full blur-3xl opacity-10" />
       </div>
+    </div>
 
       {/* Logo Container */}
       <div className="relative z-10 flex flex-col items-center animate-fade-in">
