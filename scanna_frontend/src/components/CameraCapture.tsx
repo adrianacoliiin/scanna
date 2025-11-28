@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Camera, AlertCircle, Lightbulb, Loader, Upload, X } from 'lucide-react';
-import { registrosAPI, API_BASE_URL } from '../services/api';
+import { ArrowLeft, Camera, AlertCircle, Lightbulb, Loader, Upload, FlipHorizontal } from 'lucide-react';
+import { registrosAPI } from '../services/api';
 import { ImageQualityErrorModal } from './ImageQualityErrorModal'; // ✅ NUEVO
 
 interface CameraCaptureProps {
@@ -22,6 +22,7 @@ export function CameraCapture({ onBack, onCapture, patientData }: CameraCaptureP
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment'); // ✅ NUEVO: Estado para cámara
   
   // ✅ NUEVO: Estados para el modal de error de calidad
   const [showQualityErrorModal, setShowQualityErrorModal] = useState(false);
@@ -48,21 +49,21 @@ export function CameraCapture({ onBack, onCapture, patientData }: CameraCaptureP
       setError(null);
       setCameraError(null);
       
-      // Intentar primero con cámara trasera (móviles)
       let mediaStream: MediaStream | null = null;
       
       try {
+        // ✅ USAR EL ESTADO facingMode
         mediaStream = await navigator.mediaDevices.getUserMedia({
           video: { 
-            facingMode: 'environment', // Cámara trasera en móviles
+            facingMode: facingMode, // 'environment' o 'user'
             width: { ideal: 1920 },
             height: { ideal: 1080 }
           },
           audio: false
         });
       } catch (err) {
-        // Si falla, intentar con cualquier cámara disponible
-        console.log('Cámara trasera no disponible, intentando con frontal...');
+        // Si falla con el modo específico, intentar con cualquier cámara
+        console.log('Cámara específica no disponible, intentando con cualquiera...');
         mediaStream = await navigator.mediaDevices.getUserMedia({
           video: { 
             width: { ideal: 1920 },
@@ -78,13 +79,12 @@ export function CameraCapture({ onBack, onCapture, patientData }: CameraCaptureP
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
         
-        // Asegurar que el video se reproduzca
         videoRef.current.onloadedmetadata = () => {
           videoRef.current?.play();
         };
       }
       
-      console.log('✅ Cámara iniciada correctamente');
+      console.log('✅ Cámara iniciada correctamente con modo:', facingMode);
       
     } catch (err: any) {
       console.error('❌ Error al acceder a la cámara:', err);
@@ -113,6 +113,23 @@ export function CameraCapture({ onBack, onCapture, patientData }: CameraCaptureP
     }
     setIsCameraActive(false);
     console.log('🛑 Cámara detenida');
+  };
+
+  // ✅ NUEVO: Función para cambiar entre cámara frontal y trasera
+  const toggleCamera = async () => {
+    // Detener cámara actual
+    stopCamera();
+    
+    // Cambiar modo
+    const newMode = facingMode === 'environment' ? 'user' : 'environment';
+    setFacingMode(newMode);
+    
+    console.log('🔄 Cambiando cámara a:', newMode === 'environment' ? 'trasera' : 'frontal');
+    
+    // Pequeña pausa para asegurar que la cámara se detuvo
+    setTimeout(() => {
+      startCamera();
+    }, 100);
   };
 
   const capturePhoto = () => {
@@ -432,6 +449,15 @@ export function CameraCapture({ onBack, onCapture, patientData }: CameraCaptureP
                     <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
                     <span className="text-white text-xs font-medium">EN VIVO</span>
                   </div>
+                  
+                  {/* ✅ NUEVO: Botón para cambiar cámara */}
+                  <button
+                    onClick={toggleCamera}
+                    className="absolute bottom-4 right-4 bg-black/50 backdrop-blur-sm hover:bg-black/70 p-3 rounded-full transition-all pointer-events-auto"
+                    title={facingMode === 'environment' ? 'Cambiar a cámara frontal' : 'Cambiar a cámara trasera'}
+                  >
+                    <FlipHorizontal className="w-5 h-5 text-white" strokeWidth={2.5} />
+                  </button>
                 </div>
               </>
             )}
