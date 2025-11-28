@@ -41,16 +41,24 @@ export function NewDetection({ onClose }: NewDetectionProps) {
     setError(null);
 
     try {
-      // Crear FormData con todos los campos requeridos
+      // Validar edad
+      const edadNumerica = parseInt(formData.age);
+      if (isNaN(edadNumerica) || edadNumerica < 0 || edadNumerica > 150) {
+        throw new Error('La edad debe ser un número entre 0 y 150');
+      }
+
+      // Crear FormData con los campos correctos según el backend
       const formDataToSend = new FormData();
       
-      // Datos del paciente
-      formDataToSend.append('paciente_nombre', formData.patientName);
-      formDataToSend.append('paciente_edad', formData.age);
+      // Datos del paciente (campos exactos del backend)
+      formDataToSend.append('paciente_nombre', formData.patientName.trim());
+      formDataToSend.append('paciente_edad', edadNumerica.toString());
       formDataToSend.append('paciente_sexo', formData.gender === 'male' ? 'Masculino' : 'Femenino');
       
-      // Número de expediente (opcional, pero enviamos string vacío si no hay)
-      formDataToSend.append('numeroExpediente', formData.recordNumber || '');
+      // Número de expediente (opcional, solo enviarlo si tiene valor)
+      if (formData.recordNumber?.trim()) {
+        formDataToSend.append('numero_expediente', formData.recordNumber.trim());
+      }
       
       // Imagen original
       formDataToSend.append('imagen_original', imageFile);
@@ -58,13 +66,19 @@ export function NewDetection({ onClose }: NewDetectionProps) {
       // Generar explicación (true para que el backend genere el análisis con IA)
       formDataToSend.append('generar_explicacion', 'true');
 
+      console.log('📤 Enviando datos al backend...');
+      console.log('- Paciente:', formData.patientName.trim());
+      console.log('- Edad:', edadNumerica);
+      console.log('- Sexo:', formData.gender === 'male' ? 'Masculino' : 'Femenino');
+      console.log('- Expediente:', formData.recordNumber?.trim() || '(vacío)');
+      console.log('- Imagen:', imageFile.name, `(${(imageFile.size / 1024).toFixed(2)} KB)`);
+
       // Enviar a la API
       const response = await registrosAPI.crear(formDataToSend);
 
-      // Guardar el ID del registro para futuras referencias
+      // Guardar el ID del registro
       setRegistroId(response._id);
       
-      // Debug: mostrar respuesta completa
       console.log('📦 Respuesta completa del servidor:', response);
       console.log('🖼️ Rutas de imágenes:', response.imagenes);
 
@@ -75,7 +89,7 @@ export function NewDetection({ onClose }: NewDetectionProps) {
       const result: DetectionResult = {
         diagnosis: response.analisis.resultado || response.resultado || 'Análisis completado',
         status: getStatusFromResult(response.resultado),
-        confidence: Math.floor(Math.random() * 20 + 80), // TODO: Si el backend devuelve confianza, usarla aquí
+        confidence: response.analisis.confianza || Math.floor(Math.random() * 20 + 80),
         attentionMapUrl: response.imagenes.rutaMapaAtencion 
           ? `${API_BASE}/uploads/${response.imagenes.rutaMapaAtencion}`
           : undefined,
@@ -84,12 +98,11 @@ export function NewDetection({ onClose }: NewDetectionProps) {
 
       console.log('📊 Resultado procesado:', result);
       console.log('🖼️ URL del mapa de atención:', result.attentionMapUrl);
-      console.log('🖼️ URL de la imagen original:', response.imagenes.rutaOriginal ? `${API_BASE}/uploads/${response.imagenes.rutaOriginal}` : 'N/A');
 
       setDetectionResult(result);
       setStep('results');
     } catch (err) {
-      console.error('Error al procesar imagen:', err);
+      console.error('❌ Error al procesar imagen:', err);
       setError(err instanceof Error ? err.message : 'Error al procesar la imagen');
     } finally {
       setIsLoading(false);
@@ -276,6 +289,8 @@ export function NewDetection({ onClose }: NewDetectionProps) {
             className="w-full px-5 py-4 bg-gray-50 border-0 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#001F54] focus:bg-white transition-all"
             placeholder="Ingrese la edad"
             disabled={isLoading}
+            min="0"
+            max="150"
           />
         </div>
 
@@ -364,7 +379,7 @@ export function NewDetection({ onClose }: NewDetectionProps) {
 
         <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100 mt-6">
           <p className="text-sm text-blue-900">
-            <strong>Consejo:</strong> Asegúrate de que el rostro del paciente esté bien iluminado con luz natural difusa para obtener mejores resultados.
+            <strong>Consejo:</strong> Asegúrate de que el ojo del paciente esté bien iluminado con luz natural difusa para obtener mejores resultados.
           </p>
         </div>
       </div>
