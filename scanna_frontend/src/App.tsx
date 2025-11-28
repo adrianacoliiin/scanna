@@ -6,12 +6,14 @@ import { History } from './components/History';
 import { Profile } from './components/Profile';
 import { Sidebar } from './components/Sidebar';
 import { MobileHeader } from './components/MobileHeader';
+import { SplashScreen } from './components/SplashScreen';
 import { authAPI } from './services/api';
 
 type TabType = 'dashboard' | 'history' | 'profile';
 type AuthView = 'login' | 'register';
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [authView, setAuthView] = useState<AuthView>('login');
@@ -55,6 +57,11 @@ export default function App() {
     setAuthView('login');
     setActiveTab('dashboard');
   };
+
+  // Mostrar SplashScreen primero
+  if (showSplash) {
+    return <SplashScreen onComplete={() => setShowSplash(false)} duration={2500} />;
+  }
 
   // Mostrar loading mientras se verifica la autenticación
   if (isCheckingAuth) {
