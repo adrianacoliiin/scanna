@@ -145,18 +145,26 @@ export function CameraCapture({ onBack, onCapture, patientData }: CameraCaptureP
     try {
       const formDataToSend = new FormData();
       
-      formDataToSend.append('paciente_nombre', patientData.patientName);
-      formDataToSend.append('paciente_edad', patientData.age);
+      // Asegurar que la edad es un número válido
+      const edadNumerica = parseInt(patientData.age) || 0;
+      
+      formDataToSend.append('paciente_nombre', patientData.patientName.trim());
+      formDataToSend.append('paciente_edad', edadNumerica.toString());
       formDataToSend.append('paciente_sexo', patientData.gender === 'male' ? 'Masculino' : 'Femenino');
-      formDataToSend.append('numeroExpediente', patientData.recordNumber || '');
+      
+      // Número de expediente (opcional, solo enviarlo si tiene valor)
+      if (patientData.recordNumber?.trim()) {
+        formDataToSend.append('numero_expediente', patientData.recordNumber.trim());
+      }
+      
       formDataToSend.append('imagen_original', selectedFile);
       formDataToSend.append('generar_explicacion', 'true');
 
       console.log('📤 Enviando datos desde CameraCapture...');
-      console.log('- Paciente:', patientData.patientName);
-      console.log('- Edad:', patientData.age);
+      console.log('- Paciente:', patientData.patientName.trim());
+      console.log('- Edad:', edadNumerica);
       console.log('- Sexo:', patientData.gender === 'male' ? 'Masculino' : 'Femenino');
-      console.log('- Expediente:', patientData.recordNumber || '(vacío)');
+      console.log('- Expediente:', patientData.recordNumber?.trim() || '(vacío)');
       console.log('- Imagen:', selectedFile.name, `(${(selectedFile.size / 1024).toFixed(2)} KB)`);
 
       const response = await registrosAPI.crear(formDataToSend);
